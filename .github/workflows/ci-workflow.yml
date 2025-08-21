@@ -21,3 +21,14 @@ jobs:               # 실행할 작업(job)들을 정의
 
       - name: 빌드 및 테스트
         run: ./gradlew clean build    # Gradle 빌드 및 테스트 실행 (clean 후 build)
+
+
+      - name: ECS 서비스 업데이트
+        run: |
+          aws ecs update-service \
+            --cluster myapp-cluster \
+            --service myapp-service \
+            --force-new-deployment
+
+      - name: 작업 정의 업데이트
+        run: aws ecs register-task-definition --cli-input-json file://ecs-task-def.json

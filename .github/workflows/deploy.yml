@@ -1,32 +1,106 @@
-name: CI Workflow
+name: Build & Push to ECR (Secrets with Account ID)
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
     steps:
-      - name: 소스 코드 체크아웃
+      # 1) 소스 체크아웃
+      - name: Checkout
         uses: actions/checkout@v3
 
+      # 2) JDK 17 설정
       - name: JDK 17 설정
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: gradlew 실행 권한 부여
-        run: chmod +x gradlew
+      # 3) Gradle 캐시 (선택)
+      - name: Gradle 캐시 (선택)
+        uses: gradle/actions/setup-gradle@v3
 
-      - name: 빌드 및 테스트
-        run: ./gradlew build
+      # 4) 애플리케이션 빌드 (JAR 생성)
+      - name: 애플리케이션 빌드
+        run: ./gradlew clean bootJar   # 또는 ./gradlew clean build
 
-      - name: Docker 빌드
-        run: docker build -t myapp:latest .
+      # 5) AWS 자격 증명 설정 (Secrets 사용)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
 
-      - name: 커밋 해시 태그 설정
+      # 6) ECR 로그인 (계정 ID를 Secret에서 참조)
+      - name: ECR Login
         run: |
-          IMAGE_TAG=${GITHUB_SHA::7}
-          docker build -t myapp:$IMAGE_TAG .
+          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+            | docker login --username AWS --password-stdin \
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+      # 7) (선택) 이미지 태그 구성: 커밋 해시 7자리 + latest
+      - name: Prepare tags
+        id: prep
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "REPO_URI=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/my-app-repo" >> $GITHUB_ENV
+
+      # 8) Docker 빌드 (앞 단계에서 만든 JAR을 이미지에 복사)
+      - name: Docker build
+        run: |
+          docker build -t "$REPO_URI:$IMAGE_TAG" -t "$REPO_URI:latest" .
+
+      # 9) ECR 푸시
+      - name: Docker push
+        run: |
+          docker push "$REPO_URI:$IMAGE_TAG"
+          docker push "$REPO_URI:latest"
+
+      # 10) 작업 정의 템플릿 렌더링 (envsubst로 변수 치환)
+      #     - ecs-task-def.json 내 ${AWS_ACCOUNT_ID}, ${AWS_REGION}, ${IMAGE_TAG} 치환
+      - name: Render task definition
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y gettext-base
+          export AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
+          export AWS_REGION=${{ secrets.AWS_REGION }}
+          export IMAGE_TAG=${{ env.IMAGE_TAG }}
+          envsubst < ecs-task-def.json > task-def.rendered.json
+          echo "=== Rendered task def ==="
+          cat task-def.rendered.json
+
+      # 11) 작업 정의 업데이트 (새 리비전 등록)
+      - name: 작업 정의 업데이트
+        run: |
+          aws ecs register-task-definition \
+            --cli-input-json file://task-def.rendered.json
+
+      # 12) ECS 서비스 업데이트 (새 작업 정의 강제 배포)
+      - name: ECS 서비스 업데이트
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --force-new-deployment
+
+      # 13) 배포 완료 대기 (서비스가 안정 상태가 될 때까지)
+      - name: ECS 배포 완료 대기
+        run: |
+          aws ecs wait services-stable \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE }}
+
+      # 14) 배포 상태 확인 (디플로이먼트 요약 출력)
+      - name: ECS 배포 상태 확인
+        run: |
+          aws ecs describe-services \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --services ${{ secrets.ECS_SERVICE }} \
+            --query "services[0].deployments"
