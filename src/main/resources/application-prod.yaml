@@ -1,0 +1,17 @@
+  server:
+    port: 8080
+
+  logging:
+    level:
+      root: INFO
+    file:
+      name: /app/logs/myapp.log
+
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health
+
+  DB_HOST: ${DB_HOST}
+  DB_PASSWORD: ${DB_PASSWORD}
