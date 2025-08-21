@@ -15,6 +15,7 @@ jobs:               # 실행할 작업(job)들을 정의
         uses: actions/setup-java@v3   # Java 환경을 세팅하는 공식 액션
         with:
           java-version: '17'          # 설치할 Java 버전 (여기서는 JDK 17)
+          distribution: 'temurin'
 
       - name: 빌드 및 테스트
         run: ./gradlew clean build    # Gradle 빌드 및 테스트 실행 (clean 후 build)
