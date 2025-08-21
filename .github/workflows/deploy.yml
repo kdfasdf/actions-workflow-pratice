@@ -1,0 +1,15 @@
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 소스 코드 체크아웃
+        uses: actions/checkout@v3
+
+      - name: Docker 빌드
+        run: |
+          docker build -t myapp:latest .
+            - name: 커밋 해시 태그 설정
+      - name:
+        run: |
+          IMAGE_TAG=${GITHUB_SHA::7}
+          docker build -t myapp:$IMAGE_TAG .
