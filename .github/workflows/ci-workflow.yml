@@ -2,7 +2,7 @@ name: CI Workflow   # 워크플로우 이름 (GitHub Actions 탭에서 표시되
 
 on:                 # 워크플로우 실행 조건(트리거 이벤트) 정의
   push:             # push 이벤트 발생 시 실행
-    branches: [ "main" ]   # main 브랜치에 push될 때만 실행
+    branches: [ "dev" ]   # main 브랜치에 push될 때만 실행
 
 jobs:               # 실행할 작업(job)들을 정의
   build:            # "build"라는 이름의 job
@@ -10,7 +10,7 @@ jobs:               # 실행할 작업(job)들을 정의
 
     steps:          # job 안에서 실행할 단계(step)들
       - uses: actions/checkout@v3   # 현재 리포지토리의 소스 코드를 체크아웃 (가져오기)
-      - name: grant execute permission to gradlew # gradlew 실행 권한 부여
+      - name: grant execute permission to gradlew # gradlew 실행 권한 부여 혹은 Gradle Wrapper
         run: chmod +x gradlew
 
       - name: JDK 17 설정
