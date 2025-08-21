@@ -96,6 +96,7 @@ jobs:
           aws ecs wait services-stable \
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --services ${{ secrets.ECS_SERVICE }}
+      
 
       # 14) 배포 상태 확인 (디플로이먼트 요약 출력)
       - name: ECS 배포 상태 확인
@@ -104,3 +105,6 @@ jobs:
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --services ${{ secrets.ECS_SERVICE }} \
             --query "services[0].deployments"
+
+      - name: gradlew 실행 권한 부여
+        run: chmod +x gradlew
